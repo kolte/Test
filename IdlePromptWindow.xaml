@@ -1,0 +1,33 @@
+<Window x:Class="RemoteWork.Desktop.IdlePromptWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Idle Confirmation"
+        Width="380"
+        Height="320"
+        WindowStartupLocation="CenterOwner"
+        Topmost="True"
+        ResizeMode="NoResize">
+  <Grid Background="#F8FAFC" Margin="0">
+    <StackPanel Margin="18">
+      <TextBlock x:Name="TitleText" FontSize="18" FontWeight="Bold" TextWrapping="Wrap" />
+      <TextBlock x:Name="CountdownText" Foreground="#64748B" Margin="0,8,0,14" TextWrapping="Wrap" />
+
+      <StackPanel x:Name="ReasonPanel" Visibility="Collapsed">
+        <TextBlock Text="Idle Reason" Foreground="#475569" />
+        <ComboBox x:Name="ReasonComboBox" Height="34" Margin="0,6,0,10" DisplayMemberPath="Label" SelectedValuePath="Code" />
+        <TextBlock Text="Notes" Foreground="#475569" />
+        <TextBox x:Name="ReasonTextBox" Height="54" AcceptsReturn="True" Margin="0,6,0,12" />
+      </StackPanel>
+
+      <UniformGrid x:Name="ConfirmButtons" Columns="2" Margin="0,10,0,0">
+        <Button Content="Still Working" Height="36" Margin="0,0,6,0" Click="StillWorking_Click" />
+        <Button Content="Auto Pause" Height="36" Margin="6,0,0,0" Click="AutoPause_Click" />
+      </UniformGrid>
+
+      <UniformGrid x:Name="ResumeButtons" Columns="2" Margin="0,10,0,0" Visibility="Collapsed">
+        <Button Content="Resume Work" Height="36" Margin="0,0,6,0" Click="Resume_Click" />
+        <Button Content="Stop Work" Height="36" Margin="6,0,0,0" Click="Stop_Click" />
+      </UniformGrid>
+    </StackPanel>
+  </Grid>
+</Window>

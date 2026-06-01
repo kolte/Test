@@ -1,0 +1,83 @@
+<Window x:Class="RemoteWork.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Remote Work Timekeeper"
+        Width="460"
+        Height="640"
+        MinWidth="420"
+        MinHeight="560"
+        WindowStartupLocation="CenterScreen">
+  <Grid Background="#F4F6F8">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+    </Grid.RowDefinitions>
+
+    <Border Background="#111827" Padding="20">
+      <DockPanel>
+        <Border Width="42" Height="42" CornerRadius="8" Background="#2DD4BF" DockPanel.Dock="Left" Margin="0,0,12,0">
+          <TextBlock Text="RW" FontWeight="Bold" Foreground="#10201E" HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+        <StackPanel>
+          <TextBlock Text="Timekeeper" FontSize="18" FontWeight="Bold" Foreground="White" />
+          <TextBlock x:Name="StatusText" Text="Signed out" Foreground="#CBD5E1" Margin="0,3,0,0" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <ScrollViewer Grid.Row="1">
+      <StackPanel Margin="20" Orientation="Vertical">
+        <Border x:Name="LoginPanel" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="16">
+          <StackPanel>
+            <TextBlock Text="Employee Login" FontSize="16" FontWeight="Bold" Margin="0,0,0,12" />
+            <TextBlock Text="API Base URL" Foreground="#475569" />
+            <TextBox x:Name="ApiBaseTextBox" Text="http://localhost:3000" Margin="0,6,0,12" Height="34" />
+            <TextBlock Text="Email" Foreground="#475569" />
+            <TextBox x:Name="EmailTextBox" Text="employee@example.com" Margin="0,6,0,12" Height="34" />
+            <TextBlock Text="Password" Foreground="#475569" />
+            <PasswordBox x:Name="PasswordBox" Margin="0,6,0,14" Height="34" />
+            <Button Content="Login" Height="38" Click="Login_Click" Background="#2563EB" Foreground="White" BorderThickness="0" />
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="WorkPanel" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,16,0,0" Visibility="Collapsed">
+          <StackPanel>
+            <TextBlock Text="Today" FontSize="16" FontWeight="Bold" />
+            <UniformGrid Columns="2" Margin="0,14,0,0">
+              <StackPanel Margin="0,0,8,0">
+                <TextBlock Text="Current State" Foreground="#64748B" />
+                <TextBlock x:Name="StateValueText" Text="IdleReady" FontSize="22" FontWeight="Bold" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Sync State" Foreground="#64748B" />
+                <TextBlock x:Name="SyncValueText" Text="Synced" FontSize="22" FontWeight="Bold" />
+              </StackPanel>
+            </UniformGrid>
+
+            <UniformGrid Columns="2" Margin="0,16,0,0">
+              <Button x:Name="StartButton" Content="Start Work" Height="38" Margin="0,0,8,8" Click="Start_Click" />
+              <Button x:Name="PauseButton" Content="Pause" Height="38" Margin="8,0,0,8" Click="Pause_Click" />
+              <Button x:Name="ResumeButton" Content="Resume" Height="38" Margin="0,8,8,0" Click="Resume_Click" />
+              <Button x:Name="StopButton" Content="Stop Work" Height="38" Margin="8,8,0,0" Click="Stop_Click" />
+            </UniformGrid>
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="ReportPanel" Background="White" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,16,0,0" Visibility="Collapsed">
+          <StackPanel>
+            <TextBlock Text="Daily Report" FontSize="16" FontWeight="Bold" Margin="0,0,0,12" />
+            <TextBlock Text="Completed Today" Foreground="#475569" />
+            <TextBox x:Name="CompletedTextBox" AcceptsReturn="True" Height="72" Margin="0,6,0,10" />
+            <TextBlock Text="Blockers" Foreground="#475569" />
+            <TextBox x:Name="BlockersTextBox" AcceptsReturn="True" Height="58" Margin="0,6,0,10" />
+            <TextBlock Text="Tomorrow Plan" Foreground="#475569" />
+            <TextBox x:Name="TomorrowTextBox" AcceptsReturn="True" Height="58" Margin="0,6,0,10" />
+            <TextBlock Text="Need Help" Foreground="#475569" />
+            <TextBox x:Name="NeedHelpTextBox" AcceptsReturn="True" Height="58" Margin="0,6,0,14" />
+            <Button Content="Submit Report" Height="38" Click="SubmitReport_Click" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</Window>
