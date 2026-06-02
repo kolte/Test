@@ -120,3 +120,5 @@ The client does **not** capture:
 - Clipboard contents
 - Browser history
 - Files or document contents
+
+Milestone 1 accepted: Windows client MVP hardening demo completed.
