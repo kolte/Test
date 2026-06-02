@@ -9,6 +9,7 @@ using MessageBox = System.Windows.MessageBox;
 using MessageBoxButton = System.Windows.MessageBoxButton;
 using MessageBoxImage = System.Windows.MessageBoxImage;
 using WindowState = System.Windows.WindowState;
+using Color = System.Windows.Media.Color;
 
 namespace RemoteWork.Desktop;
 
@@ -87,6 +88,7 @@ public partial class MainWindow : Window
             ReportPanel.Visibility = Visibility.Visible;
             _activityTimer.Start();
             _syncTimer.Start();
+            SetBusy(false);
         }
         catch (Exception ex)
         {
