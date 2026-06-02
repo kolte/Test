@@ -36,7 +36,7 @@
             <TextBox x:Name="EmailTextBox" Text="employee@example.com" Margin="0,6,0,12" Height="34" />
             <TextBlock Text="Password" Foreground="#475569" />
             <PasswordBox x:Name="PasswordBox" Margin="0,6,0,14" Height="34" />
-            <Button Content="Login" Height="38" Click="Login_Click" Background="#2563EB" Foreground="White" BorderThickness="0" />
+            <Button x:Name="LoginButton" Content="Login" Height="38" Click="Login_Click" Background="#2563EB" Foreground="White" BorderThickness="0" />
           </StackPanel>
         </Border>
 
@@ -46,13 +46,28 @@
             <UniformGrid Columns="2" Margin="0,14,0,0">
               <StackPanel Margin="0,0,8,0">
                 <TextBlock Text="Current State" Foreground="#64748B" />
-                <TextBlock x:Name="StateValueText" Text="IdleReady" FontSize="22" FontWeight="Bold" />
+                <TextBlock x:Name="StateValueText" Text="Ready" FontSize="22" FontWeight="Bold" />
               </StackPanel>
               <StackPanel>
-                <TextBlock Text="Sync State" Foreground="#64748B" />
-                <TextBlock x:Name="SyncValueText" Text="Synced" FontSize="22" FontWeight="Bold" />
+                <TextBlock Text="Sync" Foreground="#64748B" />
+                <TextBlock x:Name="SyncValueText" Text="Synced" FontSize="22" FontWeight="Bold" Foreground="#16A34A" />
               </StackPanel>
             </UniformGrid>
+
+            <Border Margin="0,12,0,0" Background="#F8FAFC" BorderBrush="#E5E7EB" BorderThickness="1" CornerRadius="6" Padding="10,8">
+              <Grid>
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="*" />
+                  <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                  <TextBlock x:Name="PendingCountText" Text="0 events pending" Foreground="#64748B" FontSize="12" />
+                  <TextBlock x:Name="LastSyncedText" Text="Never synced" Foreground="#94A3B8" FontSize="11" Margin="0,2,0,0" />
+                </StackPanel>
+                <Button x:Name="SyncNowButton" Grid.Column="1" Content="Sync Now" Height="28" Padding="10,0"
+                        FontSize="12" Click="SyncNow_Click" IsEnabled="False" />
+              </Grid>
+            </Border>
 
             <UniformGrid Columns="2" Margin="0,16,0,0">
               <Button x:Name="StartButton" Content="Start Work" Height="38" Margin="0,0,8,8" Click="Start_Click" />

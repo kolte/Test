@@ -59,7 +59,10 @@ public partial class IdlePromptWindow : Window
     private void Timer_Tick(object? sender, EventArgs e)
     {
         _remainingSeconds--;
-        CountdownText.Text = $"Timer will auto pause in {_remainingSeconds} seconds.";
+        var label = _remainingSeconds == 1 ? "second" : "seconds";
+        CountdownText.Text = _remainingSeconds > 0
+            ? $"Auto pausing in {_remainingSeconds} {label}."
+            : "Auto pausing now.";
         if (_remainingSeconds <= 0)
         {
             _timer.Stop();
@@ -84,6 +87,17 @@ public partial class IdlePromptWindow : Window
 
     private void Resume_Click(object sender, RoutedEventArgs e)
     {
+        if (ReasonPanel.Visibility == Visibility.Visible && ReasonComboBox.SelectedItem is null)
+        {
+            System.Windows.MessageBox.Show(
+                this,
+                "Please select an idle reason before resuming.",
+                "Reason required",
+                System.Windows.MessageBoxButton.OK,
+                System.Windows.MessageBoxImage.Warning);
+            return;
+        }
+
         Result = IdlePromptResult.ResumeWork;
         Close();
     }

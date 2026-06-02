@@ -55,6 +55,16 @@ public sealed class OfflineStore
         await command.ExecuteNonQueryAsync();
     }
 
+    public async Task<int> GetPendingCountAsync()
+    {
+        await using var connection = Open();
+        await connection.OpenAsync();
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT COUNT(*) FROM offline_events WHERE synced = 0;";
+        var result = await command.ExecuteScalarAsync();
+        return Convert.ToInt32(result);
+    }
+
     public async Task<IReadOnlyList<OfflineWorkEvent>> GetPendingAsync(int limit = 200)
     {
         var result = new List<OfflineWorkEvent>();

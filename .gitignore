@@ -1,0 +1,47 @@
+# Build output
+bin/
+obj/
+
+# Compiled binaries
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# NuGet
+*.nupkg
+*.snupkg
+project.nuget.cache
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.vcxproj.filters
+
+# Rider / JetBrains
+.idea/
+*.sln.iml
+
+# VS Code
+.vscode/
+
+# macOS
+.DS_Store
+
+# SQLite runtime db (created locally at runtime)
+*.db
+*.db-shm
+*.db-wal
+
+# Zip/archive artifacts
+*.zip
+*.tar.gz
+*.rar
+
+# Logs
+*.log

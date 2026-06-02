@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Threading;
 using RemoteWork.Desktop.Models;
 using RemoteWork.Desktop.Services;
@@ -26,6 +27,8 @@ public partial class MainWindow : Window
     private string? _sessionId;
     private DateTimeOffset? _idleStartedAt;
     private bool _promptOpen;
+    private bool _busy;
+    private DateTimeOffset? _lastSyncedAt;
 
     public MainWindow()
     {
@@ -44,21 +47,36 @@ public partial class MainWindow : Window
         _syncService = new SyncService(_api, _offlineStore);
         CreateTrayIcon();
         RenderState(_state.State);
+        await UpdateSyncStatusAsync();
     }
 
     protected override void OnClosed(EventArgs e)
     {
+        _activityTimer.Stop();
+        _syncTimer.Stop();
         _trayIcon?.Dispose();
         base.OnClosed(e);
     }
 
     private async void Login_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy) return;
+
+        var email = EmailTextBox.Text.Trim();
+        var password = PasswordBox.Password;
+
+        if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+        {
+            MessageBox.Show(this, "Email and password are required.", "Login failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        SetBusy(true);
         try
         {
-            _api = new ApiClient(ApiBaseTextBox.Text);
+            _api = new ApiClient(ApiBaseTextBox.Text.Trim());
             _syncService = new SyncService(_api, _offlineStore);
-            var login = await _api.LoginAsync(EmailTextBox.Text, PasswordBox.Password, CancellationToken.None);
+            var login = await _api.LoginAsync(email, password, CancellationToken.None);
             _api.AccessToken = login.AccessToken;
             var device = await _api.RegisterDeviceAsync(Environment.MachineName, "0.1.0", CancellationToken.None);
             _deviceId = device.Id;
@@ -73,50 +91,63 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             MessageBox.Show(this, ex.Message, "Login failed", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SetBusy(false);
         }
     }
 
     private async void Start_Click(object sender, RoutedEventArgs e)
     {
-        _state.StartWork();
+        if (_busy || _deviceId is null) return;
+        SetBusy(true);
         try
         {
-            var session = await _api.StartWorkAsync(null, _deviceId!, CancellationToken.None);
+            var session = await _api.StartWorkAsync(null, _deviceId, CancellationToken.None);
             _sessionId = session.Id;
+            _state.StartWork();
             SyncValueText.Text = "Synced";
         }
         catch
         {
+            _sessionId = null;
+            _state.StartWork();
             await _offlineStore.AddEventAsync("work_started", _sessionId);
             SyncValueText.Text = "Sync pending";
+        }
+        finally
+        {
+            SetBusy(false);
         }
     }
 
     private async void Pause_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy || _deviceId is null) return;
+        SetBusy(true);
         _state.PauseManually();
-        await TryRemoteOrCache("manual_paused", () => _api.PauseWorkAsync(_sessionId, _deviceId!, CancellationToken.None));
+        await TryRemoteOrCache("manual_paused", () => _api.PauseWorkAsync(_sessionId, _deviceId, CancellationToken.None));
+        SetBusy(false);
     }
 
     private async void Resume_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy || _deviceId is null) return;
+        SetBusy(true);
         if (_state.State == WorkClientState.ManualPaused)
-        {
             _state.ResumeFromManualPause();
-        }
         else if (_state.State == WorkClientState.ResumeConfirm)
-        {
             _state.ResumeAfterIdle();
-        }
-
-        await TryRemoteOrCache("work_resumed", () => _api.ResumeWorkAsync(_sessionId, _deviceId!, CancellationToken.None));
+        await TryRemoteOrCache("work_resumed", () => _api.ResumeWorkAsync(_sessionId, _deviceId, CancellationToken.None));
+        SetBusy(false);
     }
 
     private async void Stop_Click(object sender, RoutedEventArgs e)
     {
+        if (_busy || _deviceId is null) return;
+        SetBusy(true);
         _state.StopWork();
-        await TryRemoteOrCache("work_stopped", () => _api.StopWorkAsync(_sessionId, _deviceId!, CancellationToken.None));
+        await TryRemoteOrCache("work_stopped", () => _api.StopWorkAsync(_sessionId, _deviceId, CancellationToken.None));
         _sessionId = null;
+        SetBusy(false);
     }
 
     private async void SubmitReport_Click(object sender, RoutedEventArgs e)
@@ -142,31 +173,51 @@ public partial class MainWindow : Window
     {
         if (_promptOpen) return;
 
-        var idleDuration = _activityMonitor.GetIdleDuration();
-        if (_state.State == WorkClientState.WorkingActive && idleDuration.TotalSeconds >= _rules.Idle.IdleThresholdSeconds)
+        try
         {
-            _idleStartedAt = DateTimeOffset.UtcNow - idleDuration;
-            _state.DetectIdle();
-            await ShowIdleDetectedPrompt();
+            var idleDuration = _activityMonitor.GetIdleDuration();
+
+            if (_state.State == WorkClientState.WorkingActive
+                && idleDuration.TotalSeconds >= _rules.Idle.IdleThresholdSeconds)
+            {
+                _idleStartedAt = DateTimeOffset.UtcNow - idleDuration;
+                _state.DetectIdle();
+                await ShowIdleDetectedPrompt();
+            }
+            else if (_state.State == WorkClientState.AutoPaused
+                && idleDuration.TotalSeconds < 3)
+            {
+                _state.RequireResumeConfirmation();
+                await ShowResumePrompt();
+            }
         }
-        else if (_state.State == WorkClientState.AutoPaused && idleDuration.TotalSeconds < 3)
+        catch (Exception ex)
         {
-            _state.RequireResumeConfirmation();
-            await ShowResumePrompt();
+            _promptOpen = false;
+            SyncValueText.Text = $"Error: {ex.Message}";
         }
     }
 
     private async Task ShowIdleDetectedPrompt()
     {
         _promptOpen = true;
-        var prompt = new IdlePromptWindow(IdlePromptMode.ConfirmStillWorking, _rules.Idle.PopupTimeoutSeconds, _rules.IdleReasons)
+        IdlePromptResult result;
+        try
         {
-            Owner = this
-        };
-        prompt.ShowDialog();
-        _promptOpen = false;
+            var prompt = new IdlePromptWindow(
+                IdlePromptMode.ConfirmStillWorking,
+                _rules.Idle.PopupTimeoutSeconds,
+                _rules.IdleReasons)
+            { Owner = this };
+            prompt.ShowDialog();
+            result = prompt.Result;
+        }
+        finally
+        {
+            _promptOpen = false;
+        }
 
-        if (prompt.Result == IdlePromptResult.StillWorking)
+        if (result == IdlePromptResult.StillWorking)
         {
             _state.ConfirmStillWorking();
             return;
@@ -174,20 +225,33 @@ public partial class MainWindow : Window
 
         _state.AutoPause();
         await _offlineStore.AddEventAsync("auto_paused", _sessionId);
-        SyncValueText.Text = "Sync pending";
+        await UpdateSyncStatusAsync();
     }
 
     private async Task ShowResumePrompt()
     {
         _promptOpen = true;
-        var prompt = new IdlePromptWindow(IdlePromptMode.ResumeAfterIdle, 0, _rules.IdleReasons)
+        IdlePromptResult result;
+        string? reasonCode;
+        string? reasonText;
+        try
         {
-            Owner = this
-        };
-        prompt.ShowDialog();
-        _promptOpen = false;
+            var prompt = new IdlePromptWindow(
+                IdlePromptMode.ResumeAfterIdle,
+                0,
+                _rules.IdleReasons)
+            { Owner = this };
+            prompt.ShowDialog();
+            result = prompt.Result;
+            reasonCode = prompt.SelectedReasonCode;
+            reasonText = prompt.ReasonText;
+        }
+        finally
+        {
+            _promptOpen = false;
+        }
 
-        if (prompt.Result == IdlePromptResult.StopWork)
+        if (result == IdlePromptResult.StopWork)
         {
             _state.StopWork();
             await TryRemoteOrCache("work_stopped", () => _api.StopWorkAsync(_sessionId, _deviceId!, CancellationToken.None));
@@ -198,10 +262,10 @@ public partial class MainWindow : Window
 
         var endedAt = DateTimeOffset.UtcNow;
         var startedAt = _idleStartedAt ?? endedAt;
-        var reason = prompt.SelectedReasonCode ?? "other";
+        var reason = reasonCode ?? "other";
         try
         {
-            await _api.SubmitIdleRecordAsync(_sessionId, startedAt, endedAt, reason, prompt.ReasonText, CancellationToken.None);
+            await _api.SubmitIdleRecordAsync(_sessionId, startedAt, endedAt, reason, reasonText, CancellationToken.None);
             await _api.ResumeWorkAsync(_sessionId, _deviceId!, CancellationToken.None);
             SyncValueText.Text = "Synced";
         }
@@ -216,17 +280,30 @@ public partial class MainWindow : Window
         _idleStartedAt = null;
     }
 
+    private async void SyncNow_Click(object sender, RoutedEventArgs e)
+    {
+        SyncNowButton.IsEnabled = false;
+        await RunSyncAsync();
+        await UpdateSyncStatusAsync();
+    }
+
     private async void SyncTimer_Tick(object? sender, EventArgs e)
+    {
+        await RunSyncAsync();
+        await UpdateSyncStatusAsync();
+    }
+
+    private async Task RunSyncAsync()
     {
         if (_syncService is null) return;
         try
         {
-            var count = await _syncService.SyncPendingAsync(_deviceId, CancellationToken.None);
-            SyncValueText.Text = count > 0 ? $"Synced {count}" : "Synced";
+            await _syncService.SyncPendingAsync(_deviceId, CancellationToken.None);
+            _lastSyncedAt = DateTimeOffset.Now;
         }
         catch
         {
-            SyncValueText.Text = "Sync pending";
+            // server unavailable — pending count will reflect this
         }
     }
 
@@ -235,28 +312,71 @@ public partial class MainWindow : Window
         try
         {
             await remote();
-            SyncValueText.Text = "Synced";
+            _lastSyncedAt = DateTimeOffset.Now;
         }
         catch
         {
             await _offlineStore.AddEventAsync(eventType, _sessionId);
-            SyncValueText.Text = "Sync pending";
         }
+
+        await UpdateSyncStatusAsync();
+    }
+
+    private async Task UpdateSyncStatusAsync()
+    {
+        var pending = await _offlineStore.GetPendingCountAsync();
+        var label = pending == 1 ? "event" : "events";
+        PendingCountText.Text = pending > 0 ? $"{pending} {label} pending" : "All events synced";
+
+        LastSyncedText.Text = _lastSyncedAt.HasValue
+            ? $"Last synced {_lastSyncedAt.Value:HH:mm:ss}"
+            : "Never synced";
+
+        if (pending > 0)
+        {
+            SyncValueText.Text = "Pending";
+            SyncValueText.Foreground = new SolidColorBrush(Color.FromRgb(0xD9, 0x77, 0x06)); // amber
+            SyncNowButton.IsEnabled = true;
+        }
+        else
+        {
+            SyncValueText.Text = "Synced";
+            SyncValueText.Foreground = new SolidColorBrush(Color.FromRgb(0x16, 0xA3, 0x4A)); // green
+            SyncNowButton.IsEnabled = false;
+        }
+    }
+
+    private void SetBusy(bool busy)
+    {
+        _busy = busy;
+        LoginButton.IsEnabled = !busy;
+        RenderState(_state.State);
     }
 
     private void RenderState(WorkClientState state)
     {
-        StatusText.Text = state.ToString();
-        StateValueText.Text = state.ToString();
-        if (_trayIcon is not null)
+        StatusText.Text = state switch
         {
-            _trayIcon.Text = $"Timekeeper - {state}";
-        }
+            WorkClientState.SignedOut    => "Signed out",
+            WorkClientState.IdleReady   => "Ready",
+            WorkClientState.WorkingActive => "Working",
+            WorkClientState.IdleDetected  => "Idle detected",
+            WorkClientState.AutoPaused    => "Auto paused",
+            WorkClientState.ManualPaused  => "Paused",
+            WorkClientState.ResumeConfirm => "Resume needed",
+            WorkClientState.OffWork       => "Off work",
+            _                             => state.ToString()
+        };
+        StateValueText.Text = StatusText.Text;
 
-        StartButton.IsEnabled = state is WorkClientState.IdleReady or WorkClientState.OffWork;
-        PauseButton.IsEnabled = state == WorkClientState.WorkingActive;
-        ResumeButton.IsEnabled = state is WorkClientState.ManualPaused or WorkClientState.ResumeConfirm;
-        StopButton.IsEnabled = state is WorkClientState.WorkingActive or WorkClientState.ManualPaused or WorkClientState.AutoPaused or WorkClientState.ResumeConfirm;
+        if (_trayIcon is not null)
+            _trayIcon.Text = $"Timekeeper - {StatusText.Text}";
+
+        var idle = !_busy;
+        StartButton.IsEnabled  = idle && state is WorkClientState.IdleReady or WorkClientState.OffWork;
+        PauseButton.IsEnabled  = idle && state == WorkClientState.WorkingActive;
+        ResumeButton.IsEnabled = idle && state is WorkClientState.ManualPaused or WorkClientState.ResumeConfirm;
+        StopButton.IsEnabled   = idle && state is WorkClientState.WorkingActive or WorkClientState.ManualPaused or WorkClientState.AutoPaused or WorkClientState.ResumeConfirm;
     }
 
     private void CreateTrayIcon()
