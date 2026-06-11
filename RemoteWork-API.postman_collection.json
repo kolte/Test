@@ -1,0 +1,301 @@
+{
+  "info": {
+    "name": "RemoteWork API",
+    "description": "All endpoints for the RemoteWork Timekeeper backend.\n\nUsage:\n1. Set the `baseUrl` variable (default: http://localhost:3000).\n2. Run \"Login\" first — it auto-saves `accessToken`, `refreshToken`, and `userId` as collection variables.\n3. Run \"Register Device\" — it auto-saves `deviceId`.\n4. Run \"Start Work\" — it auto-saves `sessionId` and `clientSessionId`.\n5. All subsequent requests use these variables automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl",         "value": "http://localhost:3000", "type": "string" },
+    { "key": "accessToken",     "value": "", "type": "string" },
+    { "key": "refreshToken",    "value": "", "type": "string" },
+    { "key": "userId",          "value": "", "type": "string" },
+    { "key": "deviceId",        "value": "", "type": "string" },
+    { "key": "sessionId",       "value": "", "type": "string" },
+    { "key": "clientSessionId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken',  res.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', res.refreshToken);",
+                  "pm.collectionVariables.set('userId',       res.user?.id ?? '');"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"employee@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "description": "Authenticates a user and returns an access token, a refresh token, and basic user info. Run this first — the test script saves all three as collection variables."
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('accessToken',  res.accessToken);",
+                  "pm.collectionVariables.set('refreshToken', res.refreshToken);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/auth/refresh", "host": ["{{baseUrl}}"], "path": ["auth", "refresh"] },
+            "description": "Exchanges the current refresh token for a fresh access/refresh pair. Refresh tokens are rotated on use — the test script updates both collection variables automatically."
+          }
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/auth/me", "host": ["{{baseUrl}}"], "path": ["auth", "me"] },
+            "description": "Returns the authenticated user's profile (id, email, name, roles, organizationId)."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Devices",
+      "item": [
+        {
+          "name": "Register Device",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('deviceId', res.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceName\": \"Dev Machine\",\n  \"platform\": \"windows\",\n  \"appVersion\": \"0.1.0\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/devices/register", "host": ["{{baseUrl}}"], "path": ["desktop", "devices", "register"] },
+            "description": "Registers or re-registers this device for the authenticated user (upserted by userId + deviceName). Returns the device id. The test script saves it as `deviceId`.\n\n`platform` must be `\"windows\"` — the only accepted value currently."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rules",
+      "item": [
+        {
+          "name": "Get Rules",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/desktop/rules", "host": ["{{baseUrl}}"], "path": ["desktop", "rules"] },
+            "description": "Returns the org-wide work and idle policy applied by the desktop client: target daily hours, idle detection threshold, auto-pause threshold, and the list of idle reason codes shown in the idle-resolution prompt."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Work Actions",
+      "item": [
+        {
+          "name": "Start Work",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Mint a fresh clientSessionId for this session.",
+                  "const uuid = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {",
+                  "  const r = Math.random() * 16 | 0;",
+                  "  return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);",
+                  "});",
+                  "pm.collectionVariables.set('clientSessionId', uuid());"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const res = pm.response.json();",
+                  "pm.collectionVariables.set('sessionId', res.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"clientSessionId\": \"{{clientSessionId}}\",\n  \"occurredAt\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/work/start", "host": ["{{baseUrl}}"], "path": ["desktop", "work", "start"] },
+            "description": "Creates a new work session. The pre-request script mints a fresh `clientSessionId` (used as an idempotency key — safe to retry). The test script saves the returned server session id as `sessionId`.\n\nReturns 200 with the created WorkSession object."
+          }
+        },
+        {
+          "name": "Pause Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"clientSessionId\": \"{{clientSessionId}}\",\n  \"occurredAt\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/work/pause", "host": ["{{baseUrl}}"], "path": ["desktop", "work", "pause"] },
+            "description": "Pauses the active session. Either `sessionId` or `clientSessionId` must be present (both are sent here for robustness). Returns 204 No Content."
+          }
+        },
+        {
+          "name": "Resume Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"clientSessionId\": \"{{clientSessionId}}\",\n  \"occurredAt\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/work/resume", "host": ["{{baseUrl}}"], "path": ["desktop", "work", "resume"] },
+            "description": "Resumes a paused session. Returns 204 No Content."
+          }
+        },
+        {
+          "name": "Stop Work",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"sessionId\": \"{{sessionId}}\",\n  \"clientSessionId\": \"{{clientSessionId}}\",\n  \"occurredAt\": \"{{$isoTimestamp}}\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/work/stop", "host": ["{{baseUrl}}"], "path": ["desktop", "work", "stop"] },
+            "description": "Ends the active session. Returns 204 No Content."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Idle Records",
+      "item": [
+        {
+          "name": "Submit Idle Record",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"{{sessionId}}\",\n  \"idleStartedAt\": \"2026-06-10T10:00:00.000Z\",\n  \"idleEndedAt\": \"2026-06-10T10:15:00.000Z\",\n  \"reasonCode\": \"break\",\n  \"reasonText\": \"Coffee break\",\n  \"autoPaused\": true\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/idle-records", "host": ["{{baseUrl}}"], "path": ["desktop", "idle-records"] },
+            "description": "Records an idle period for the given session. `reasonCode` must match one of the codes returned by GET /desktop/rules. `autoPaused` is accepted but ignored — pause type is already captured by the WorkEvent type.\n\nReturns 204 No Content."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Daily Reports",
+      "item": [
+        {
+          "name": "Submit Daily Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"workDate\": \"2026-06-10\",\n  \"completed\": \"Finished the sync pipeline and E2E testing.\",\n  \"blockers\": \"None.\",\n  \"tomorrowPlan\": \"Client review and demo prep.\",\n  \"needHelp\": \"No.\"\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/daily-reports", "host": ["{{baseUrl}}"], "path": ["desktop", "daily-reports"] },
+            "description": "Creates or updates the authenticated user's daily report for the given date (upserted on userId + workDate). `workDate` must be in `yyyy-MM-dd` format. All text fields are required but may be empty strings.\n\nReturns 204 No Content."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Today Summary",
+      "item": [
+        {
+          "name": "Get Today Summary",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/desktop/today-summary", "host": ["{{baseUrl}}"], "path": ["desktop", "today-summary"] },
+            "description": "Returns today's rolled-up stats for the authenticated user: total worked time (ms), idle time (ms), session count, daily report submission status, and the UTC work date. Recalculated automatically after every sync batch."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync",
+      "item": [
+        {
+          "name": "Sync Offline Events",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"{{deviceId}}\",\n  \"batchId\": \"a1b2c3d4-e5f6-7890-abcd-ef1234567890\",\n  \"events\": [\n    {\n      \"clientEventId\": \"11111111-1111-4111-8111-111111111111\",\n      \"type\": \"work_started\",\n      \"occurredAt\": \"2026-06-10T08:00:00.000Z\",\n      \"clientSessionId\": \"{{clientSessionId}}\"\n    },\n    {\n      \"clientEventId\": \"22222222-2222-4222-8222-222222222222\",\n      \"type\": \"work_paused\",\n      \"occurredAt\": \"2026-06-10T10:00:00.000Z\",\n      \"clientSessionId\": \"{{clientSessionId}}\"\n    },\n    {\n      \"clientEventId\": \"33333333-3333-4333-8333-333333333333\",\n      \"type\": \"work_resumed\",\n      \"occurredAt\": \"2026-06-10T10:15:00.000Z\",\n      \"clientSessionId\": \"{{clientSessionId}}\"\n    },\n    {\n      \"clientEventId\": \"44444444-4444-4444-8444-444444444444\",\n      \"type\": \"work_stopped\",\n      \"occurredAt\": \"2026-06-10T17:00:00.000Z\",\n      \"clientSessionId\": \"{{clientSessionId}}\"\n    }\n  ]\n}"
+            },
+            "url": { "raw": "{{baseUrl}}/desktop/events/sync", "host": ["{{baseUrl}}"], "path": ["desktop", "events", "sync"] },
+            "description": "Submits a batch of offline-cached events for processing.\n\nKey behaviours to test:\n- **Idempotent batch**: resend the same `batchId` — response will include `\"duplicateBatch\": true` with the original counts.\n- **Idempotent events**: resend the same `clientEventId` values in a new `batchId` — they appear in `skipped`, not `accepted`.\n- **Session mapping**: if events carry `clientSessionId` (no `sessionId`), the response includes a `sessionMappings` array mapping each `clientSessionId` to its server-assigned `sessionId`.\n\nNote: this endpoint does not require an Authorization header — it authenticates implicitly via `deviceId`.\n\nReturns:\n```json\n{\n  \"accepted\": 4,\n  \"skipped\": 0,\n  \"duplicateBatch\": false,\n  \"sessionMappings\": [\n    { \"clientSessionId\": \"...\", \"sessionId\": \"...\" }\n  ],\n  \"errors\": []\n}\n```"
+          }
+        }
+      ]
+    }
+  ]
+}

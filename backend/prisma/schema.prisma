@@ -1,0 +1,134 @@
+// RemoteWork Timekeeper backend schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  // organizationId and roles are included in the auth response and user profile.
+  // Defaulted to single-tenant values; replace with proper relational models
+  // if multi-tenancy or role administration is needed.
+  organizationId String   @default("org-001")
+  roles          String[] @default(["employee"])
+  devices   Device[]
+  sessions  WorkSession[]
+  reports   DailyReport[]
+  workDays  WorkDay[]
+  createdAt DateTime @default(now())
+}
+
+model Device {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  name         String
+  // Persisted platform identifier for the device. Defaulted to "windows"
+  // since that is the only supported client platform.
+  platform     String   @default("windows")
+  appVersion   String?
+  lastSeenAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+  syncBatches  SyncBatch[]
+
+  // Upsert by (userId, name) so re-registering the same machine
+  // updates the existing row rather than creating duplicates.
+  @@unique([userId, name])
+}
+
+model WorkSession {
+  id              String   @id @default(uuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id])
+  deviceId        String
+  startedAt       DateTime
+  endedAt         DateTime?
+  status          String   // active | paused | stopped
+  // Client-generated session id set when the session was started offline.
+  // Unique per device — maps a client-side id to the server-assigned one.
+  clientSessionId String?
+  idleRecords     IdleRecord[]
+  events          WorkEvent[]
+
+  @@unique([deviceId, clientSessionId])
+}
+
+model WorkEvent {
+  id            String   @id @default(uuid())
+  sessionId     String
+  session       WorkSession @relation(fields: [sessionId], references: [id])
+  deviceId      String
+  type          String   // work_started | work_paused | work_resumed | work_stopped | auto_paused | manual_paused | idle_resolved
+  occurredAt    DateTime
+  payload       Json?
+  // Client-generated event id used as an idempotency key: replaying the
+  // same event in a later batch is recognized and skipped, not double-counted.
+  clientEventId String
+
+  @@unique([deviceId, clientEventId])
+}
+
+model IdleRecord {
+  id          String   @id @default(uuid())
+  sessionId   String
+  session     WorkSession @relation(fields: [sessionId], references: [id])
+  startedAt   DateTime
+  endedAt     DateTime
+  reasonCode  String
+  reasonText  String?
+  createdAt   DateTime @default(now())
+}
+
+model DailyReport {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  workDate      String   // yyyy-MM-dd
+  completed     String?
+  blockers      String?
+  tomorrowPlan  String?
+  needHelp      String?
+  updatedAt     DateTime @updatedAt
+
+  // One report per user per day — upserted on resubmission.
+  @@unique([userId, workDate])
+}
+
+// Per-user, per-day rollup of session activity. Recomputed from scratch
+// whenever a sync batch lands new events for a given UTC calendar day.
+// Kept separate from DailyReport, which holds the user's free-text write-up.
+model WorkDay {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  workDate     String   // yyyy-MM-dd (UTC)
+  workedMs     Int      @default(0) // total active (non-idle) time across sessions, in ms
+  idleMs       Int      @default(0) // total idle time (from IdleRecord) overlapping that day, in ms
+  sessionCount Int      @default(0) // distinct WorkSessions with any activity that day
+  updatedAt    DateTime @updatedAt
+
+  // One rollup row per user per day — upserted in place on recalculation.
+  @@unique([userId, workDate])
+}
+
+model SyncBatch {
+  id        String   @id @default(uuid())
+  deviceId  String
+  device    Device   @relation(fields: [deviceId], references: [id])
+  batchId   String
+  acceptedCount Int  @default(0)
+  skippedCount  Int  @default(0)
+  createdAt DateTime @default(now())
+
+  // (deviceId, batchId) is unique — replaying the same batch is detected
+  // and short-circuited without reprocessing any events.
+  @@unique([deviceId, batchId])
+}
