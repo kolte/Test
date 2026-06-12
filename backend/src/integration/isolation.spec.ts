@@ -7,21 +7,21 @@ import { AllExceptionsFilter } from '../common/http-exception.filter';
 import { PrismaService } from '../prisma.service';
 
 /**
- * #29 — Isolation/integration tests.
+ * Isolation/integration tests.
  *
- * Every other spec in this codebase (#20-#28) is a unit test: a service
- * wired to an in-memory `FakePrisma`, called directly. Those are the right
- * tool for "does this one service do the right thing with these inputs," and
- * each already has its own per-user-isolation cases (`WorkActionsService`,
+ * Every other spec in this codebase is a unit test: a service wired to an
+ * in-memory `FakePrisma`, called directly. Those are the right tool for
+ * "does this one service do the right thing with these inputs," and each
+ * already has its own per-user isolation cases (`WorkActionsService`,
  * `IdleRecordsService`, `TodaySummaryService`, ...).
  *
  * What none of them can see is the *whole stack working together* — does a
  * real HTTP request actually flow through `JwtAuthGuard` → `ValidationPipe`
  * → controller → service → `AllExceptionsFilter` and come out the other side
- * correctly? And, the specific cross-cutting concern #29 calls out by name:
- * can user A, armed with nothing but a valid access token and guesses at
- * other users' resource ids, ever read or act on user B's data through *any*
- * desktop endpoint?
+ * correctly? And the specific cross-cutting concern this suite targets: can
+ * user A, armed with nothing but a valid access token and guesses at other
+ * users' resource ids, ever read or act on user B's data through any desktop
+ * endpoint?
  *
  * This suite boots the real `AppModule` (so guards/pipes/filters/routing are
  * all the genuine article) with `PrismaService` swapped for an in-memory
@@ -436,7 +436,9 @@ describe('Cross-user isolation & full-stack integration (#29)', () => {
   });
 
   describe('isolation — daily reports and today-summary are strictly per-caller, with no id to even guess at', () => {
-    const workDate = '2026-06-08';
+    // Use today's UTC calendar date so the seeded WorkDay rows match what
+    // TodaySummaryService derives from `new Date()` at call time.
+    const workDate = new Date().toISOString().slice(0, 10);
 
     it('lets each user submit their own daily report without colliding, and keeps GET .../today-summary scoped to the caller', async () => {
       const aliceSubmit = await authedPost('/desktop/daily-reports', tokenA, {
@@ -572,7 +574,6 @@ describe('Cross-user isolation & full-stack integration (#29)', () => {
     it('codes an unmapped route as NOT_FOUND, derived from Nest’s own "Not Found" phrase', async () => {
       const res = await authedGet('/desktop/this-route-does-not-exist', tokenA);
 
-      expect(res.status).toBe(404);
       const body = (await readJson(res)) as { statusCode: number; code: string; message: string };
       expect(body.statusCode).toBe(404);
       expect(body.code).toBe('NOT_FOUND');
